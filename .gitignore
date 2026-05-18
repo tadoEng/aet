@@ -1,4 +1,7 @@
 /target/
+.codex-target*/
+.serena/
+tmp/
 dist/
 *.apkg
 *.pdf
