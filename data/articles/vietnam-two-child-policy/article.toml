@@ -1,61 +1,15 @@
-# AET Article Metadata
-# This file describes one source article used for IELTS study.
-# All fields marked REQUIRED must be present for aet validate to pass.
-
-# REQUIRED — unique slug, matches the folder name, used in dist/ output path
 id = "vietnam-two-child-policy"
-
-# REQUIRED — full article title as published
 title = "Facing a Demographic Shift, Vietnam Abolishes Two-Child Policy"
-
-# REQUIRED — publication name
-source = "The New York Times"
-
-# REQUIRED — author full name
+source_name = "The New York Times"
 author = "Damien Cave"
-
-# REQUIRED — publication date ISO 8601
 date = "2025-06-04"
-
-# REQUIRED — CEFR level range of the article
 level = "B2-C1"
-
-# REQUIRED — primary IELTS topics covered (must match controlled topic codes in DECISIONS.md)
-topics = ["population", "government-policy", "economy", "society"]
-
-# REQUIRED — IELTS skills this article is useful for
+primary_topics = ["family-relationships-teenagers", "government-policy", "business-economics"]
+secondary_topics = ["urban-rural", "poverty-global-issues"]
 skills = ["reading", "writing-task2", "speaking-part3"]
+teacher_pdf = "inbox/2025-06-04-vietnam-two-child-policy/teacher-vocab.pdf"
+private = true
+copyright_mode = "private-study-only"
 
-# OPTIONAL — subtitle or standfirst
-subtitle = "Even though the regulation was loosely enforced, the nation's birthrate fell to a record low last year."
-
-# OPTIONAL — additional reporting credit
-contributor = "Tung Ngo"
-
-# OPTIONAL — short summary written by the student (your own words, not copied)
-# This is what goes into public.json for the web — safe to publish
-summary = ""
-
-# OPTIONAL — 3 Speaking Part 3 questions generated from this article
-[[speaking_questions]]
-part = 3
-question = "Do you think governments should have the right to control how many children families can have? Why or why not?"
-
-[[speaking_questions]]
-part = 3
-question = "What factors do you think most influence young couples' decisions about having children today?"
-
-[[speaking_questions]]
-part = 3
-question = "How might a country's aging population affect its economy in the long term?"
-
-# OPTIONAL — Writing Task 2 prompts related to this article's themes
-[[writing_prompts]]
-type = "discussion"
-question = "Some people believe governments should introduce policies to encourage people to have more children. Others argue that personal decisions about family size should not be influenced by the state. Discuss both views and give your opinion."
-useful_vocab_ids = ["pop-001", "pop-002", "pop-004", "eco-001", "eco-004", "pol-002", "gen-003", "gen-019", "gen-020"]
-
-[[writing_prompts]]
-type = "causes_solutions"
-question = "In many countries, birthrates are falling and populations are aging rapidly. What are the causes of this trend and what measures could governments take to address it?"
-useful_vocab_ids = ["pop-001", "pop-002", "pop-005", "pop-006", "eco-001", "eco-004", "eco-007", "eco-008", "pol-014", "pol-019", "pol-020"]
+[stats]
+has_ipa = false
