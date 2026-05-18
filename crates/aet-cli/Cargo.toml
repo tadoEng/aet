@@ -1,0 +1,19 @@
+[package]
+name = "aet-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "aet"
+path = "src/main.rs"
+ 
+[dependencies]
+aet-core = { path = "../aet-core" }
+aet-anki = { path = "../aet-anki" }
+aet-typst = { path = "../aet-typst" }
+clap = { workspace = true }
+anyhow = { workspace = true }
