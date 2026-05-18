@@ -1,14 +1,34 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! AET Core — data models, parsing, and validation.
+//!
+//! This crate is the foundation. All other AET crates depend on it.
+//! It has no knowledge of output formats (Anki, Typst, JSON).
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod models;
+pub mod validator;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+pub use models::{Article, ArticleMeta, VocabEntry, parse_article_meta, parse_vocab};
+pub use validator::{ValidationResult, validate};
+
+use anyhow::{Context, Result};
+use std::path::Path;
+
+/// Load a complete article from a directory path.
+///
+/// Expects:
+/// - `{dir}/article.toml`
+/// - `{dir}/vocab.csv`
+pub fn load_article(dir: &Path) -> Result<Article> {
+    let toml_path = dir.join("article.toml");
+    let csv_path = dir.join("vocab.csv");
+
+    let toml_content = std::fs::read_to_string(&toml_path)
+        .with_context(|| format!("Cannot read {}", toml_path.display()))?;
+
+    let csv_bytes = std::fs::read(&csv_path)
+        .with_context(|| format!("Cannot read {}", csv_path.display()))?;
+
+    let meta = parse_article_meta(&toml_content)?;
+    let vocab = parse_vocab(&csv_bytes)?;
+
+    Ok(Article { meta, vocab })
 }

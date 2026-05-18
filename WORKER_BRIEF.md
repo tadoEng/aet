@@ -1,363 +1,567 @@
-# AET — Academic English Training
-# Worker Agent Brief — v0.1 Prototype
+# AET — Worker Agent Brief
 
-Read this entire document before writing any code.
-Read DECISIONS.md before writing any code.
-Read /mnt/skills/user/rust-best-practices/SKILL.md before writing any Rust.
-Read /mnt/skills/user/typst-author/SKILL.md before writing any Typst template.
+**Version:** v3.0 (research-updated)
+**Phase:** 1 — Core Pipeline
+**Stack:** Rust (stable), Typst CLI, CSV, TOML
 
 ---
 
-## What You Are Building
+## Objective
 
-A Rust CLI tool called `aet` that reads structured IELTS study data (one article folder)
-and produces three output files: a vocabulary PDF, and two Anki TSV files.
-
-This is a local developer tool. There is no web server, no database, no UI.
-The user runs it from the terminal. An AI agent may also run it.
-
----
-
-## Acceptance Criteria — v0.1 Is Done When
-
-Given the test fixture at `data/articles/vietnam-two-child-policy/` (already populated):
-
-1. `aet validate data/articles/vietnam-two-child-policy` exits 0 and prints a summary:
-   ```
-   ✓ article.toml — valid
-   ✓ vocab.csv — 88 entries loaded
-   ⚠ 88 entries missing my_sentence — add production practice sentences
-   ```
-
-2. `aet build data/articles/vietnam-two-child-policy` exits 0 and produces:
-   ```
-   dist/vietnam-two-child-policy/
-     vocab.pdf          ← compiled by Typst
-     anki-basic.tsv     ← tab-delimited, UTF-8
-     anki-cloze.tsv     ← tab-delimited, UTF-8
-   ```
-
-3. `anki-basic.tsv` imports cleanly into Anki desktop without errors.
-
-4. `anki-cloze.tsv` imports cleanly into Anki desktop with cloze deletions rendering correctly.
-
-5. `vocab.pdf` renders all 88 entries grouped by category, matching the teacher's 4-column layout.
-
-6. If `typst` is not in PATH, the build command prints:
-   ```
-   Error: typst not found in PATH.
-   Install from: https://github.com/typst/typst/releases
-   ```
-   and exits with code 1.
-
-7. All Vietnamese characters render correctly in both TSV and PDF outputs.
+Build `aet` — a local CLI tool that:
+1. Reads `article.toml` + `vocab.csv` from an article folder.
+2. Validates all fields.
+3. Exports three Anki TSV files.
+4. Exports one PDF via Typst CLI.
+5. Displays a session timer at the end of every command.
 
 ---
 
-## Project Structure to Create
+## Final 19-Column Schema
+
+### Column order (locked)
 
 ```
-aet/
-  Cargo.toml                    ← workspace root
-  DECISIONS.md                  ← copy from bootstrap
-  README.md                     ← short project description
-  
-  data/                         ← test fixture (copy from bootstrap)
-    articles/
-      vietnam-two-child-policy/
-        article.toml
-        vocab.csv
-  
-  templates/
-    typst/
-      vocab-pack.typ            ← Typst template (parameterised)
-  
-  dist/                         ← gitignored, build output
-  
-  crates/
-    aet-core/
-      Cargo.toml
-      src/
-        lib.rs
-        models.rs               ← VocabEntry, ArticleMeta structs
-        parser.rs               ← CSV + TOML parsing
-        validator.rs            ← validation logic + warning collection
-    
-    aet-anki/
-      Cargo.toml
-      src/
-        lib.rs
-        basic.rs                ← generate basic card TSV rows
-        cloze.rs                ← generate cloze card TSV rows
-    
-    aet-typst/
-      Cargo.toml
-      src/
-        lib.rs
-        renderer.rs             ← build .typ file, shell out to typst CLI
-    
-    aet-cli/
-      Cargo.toml
-      src/
-        main.rs
-        commands/
-          validate.rs
-          build.rs
+id, term, ipa, category, type,
+definition_en, meaning_vi, source_sentence, my_sentence, priority,
+collocation_pattern, ielts_topics, skill_use, difficulty,
+card_types, origin, review_status, anki_export, tags
+```
+
+### Split
+
+```
+──── USER FILLS (10) ───────────────────────────────────────
+id               term              ipa
+category         type              definition_en
+meaning_vi       source_sentence   my_sentence
+priority
+
+──── CODEX FILLS (9) ───────────────────────────────────────
+collocation_pattern    ielts_topics      skill_use
+difficulty             card_types        origin
+review_status          anki_export       tags
+```
+
+### Field controlled vocabularies
+
+**`type`:**
+```
+word | noun_phrase | verb_phrase | collocation |
+fixed_phrase | prepositional_pattern | reporting_verb | sentence_frame
+```
+
+**`priority`:** `P1 | P2 | P3`
+
+**`card_types`:** semicolon-separated subset of `basic | cloze | production`
+
+**`origin`:** `teacher | codex | user | manual`
+
+**`review_status`:** `draft | reviewed | approved | rejected`
+
+**`anki_export`:** `yes | no`
+
+**`skill_use`:** semicolon-separated subset of `reading | writing-task1 | writing-task2 | speaking-part2 | speaking-part3 | listening`
+
+**`difficulty`:** `B1 | B2 | C1 | C2`
+
+**`ielts_topics`:** semicolon-separated from canonical list:
+```
+environment | poverty-global-issues | law-crimes | business-economics |
+health-medicine | education | family-relationships-teenagers |
+urban-rural | personalities-physical-appearances | work-jobs | government-policy
 ```
 
 ---
 
-## Data Models
+## Validation Rules
 
-### VocabEntry (from vocab.csv)
+Run on `aet validate <article-folder>`.
 
-```rust
-pub struct VocabEntry {
-    pub id: String,                    // e.g. "pop-001"
-    pub source_type: String,           // "article" | "topic"
-    pub source_id: String,             // e.g. "vietnam-two-child-policy"
-    pub term: String,
-    pub category: String,              // teacher's grouping label
-    pub entry_type: String,            // "noun_phrase" | "verb" | etc (CSV field: type)
-    pub definition_en: String,
-    pub meaning_vi: String,
-    pub source_sentence: String,
-    pub my_sentence: Option<String>,   // None if empty string in CSV
-    pub collocation_pattern: String,
-    pub ielts_topic: String,
-    pub skill_use: Vec<String>,        // split on ";"
-    pub difficulty: String,            // "B1" | "B2" | "C1" | "C2"
-    pub card_types: Vec<String>,       // split on ";"
-    pub status: String,                // "new" | "learning" | "mature"
-    pub tags: Vec<String>,             // split on " "
+**Required files:**
+- `article.toml`
+- `vocab.csv`
+
+**Required CSV columns:** all 19 in correct order.
+
+**Per-row rules:**
+
+| Field | Rule |
+|---|---|
+| `id` | Non-empty, unique within file |
+| `term` | Non-empty |
+| `type` | Must be a valid controlled value |
+| `definition_en` | Non-empty |
+| `meaning_vi` | Non-empty |
+| `source_sentence` | Non-empty |
+| `priority` | Must be P1, P2, or P3 |
+| `origin` | Must be a valid controlled value |
+| `review_status` | Must be a valid controlled value |
+| `anki_export` | Must be `yes` or `no` |
+| `ipa` | Optional — may be empty |
+| `my_sentence` | Optional — WARN if empty on P1+approved rows, do not block |
+| `ielts_topics` | Each semicolon-separated value must be in canonical list |
+| `card_types` | Each semicolon-separated value must be `basic`, `cloze`, or `production` |
+
+**Article-level validation:**
+- Compute `IpaMode` from all `ipa` fields:
+  ```rust
+  pub enum IpaMode {
+      Absent,   // all ipa fields are empty
+      Mixed,    // some present, some empty
+      Present,  // all ipa fields are non-empty
+  }
+  ```
+- Output `ipa_mode: absent | mixed | present` in validation summary.
+- Cross-check against `has_ipa` in `article.toml [stats]` — warn if they disagree, do not block.
+
+**CLI output format:**
+```
+✓ article.toml valid
+✓ vocab.csv: 115 rows, 19 columns
+✓ IDs unique
+✓ ipa_mode: mixed (114 present, 1 absent)
+⚠ 12 P1+approved rows have empty my_sentence — fill after review cycles
+✓ All ielts_topics valid
+✓ All type values valid
+✓ Validation passed (0 errors, 12 warnings)
+[aet] Session time today: 3 min.  ✓ Within 20-min budget.
+```
+
+---
+
+## Anki Export Specification
+
+### Export filter (applies to ALL three files)
+
+Export a row only when ALL of:
+- `priority = P1` (default) OR `--all-priorities` flag is set
+- `review_status = approved`
+- `anki_export = yes`
+- `source_sentence` is not empty
+
+### TSV column format (all three files)
+
+All three Anki export files use **4 columns**:
+
+```
+front <TAB> back <TAB> extra <TAB> tags
+```
+
+**Design rationale (Ali Abdaal Anki Masterclass, 2024):**
+The `back` should be clean and atomic — just the answer. Everything needed to understand context goes in `extra`, which Anki displays below the back. This is how serious Anki users use the app. The `source_sentence`, `collocation_pattern`, and topic context are reference material, not the answer itself.
+
+---
+
+### File 1: `anki-basic.tsv`
+
+Tests passive meaning. Always generated.
+
+**Front:**
+```
+What does "{term}" mean?
+```
+
+**Back (clean — answer only):**
+```
+{definition_en}
+{meaning_vi}
+```
+
+**Extra (reference panel):**
+```
+Source: {source_sentence}
+Pattern: {collocation_pattern}
+Topic: {ielts_topics joined with " · "}
+```
+
+**Tags:** `AET article::{article_id} topic::{ielts_topics[0]} priority::P1`
+
+---
+
+### File 2: `anki-cloze.tsv`
+
+Tests vocabulary in context. Always generated.
+
+**Text:** Replace `{term}` in `source_sentence` with `{{c1::term}}`.
+
+**Cloze fallback:** If the exact term string is not found in `source_sentence`:
+1. Try case-insensitive match.
+2. Try matching the first word of the term only (for collocations).
+3. If no match: wrap the whole `source_sentence` as a cloze with the `term` as the answer in `extra`.
+
+**Back (extra — reference panel):**
+```
+{term} = {definition_en}
+Pattern: {collocation_pattern}
+Topic: {ielts_topics joined with " · "}
+```
+
+**Tags:** same rules as basic.
+
+---
+
+### File 3: `anki-production.tsv`
+
+Tests active production. Always generated (even when `my_sentence` is empty).
+
+**Research basis (Decision D8):** The production card is a *prompt card*. The back stays clean — no model answer. Context goes in `extra`. This implements Swain's Output Hypothesis: the learner must attempt genuine production before checking the reference. Showing a model answer removes the "push" that drives productive gains.
+
+**Front:**
+```
+Use "{term}" in an IELTS-style sentence about {ielts_topics[0]}.
+```
+
+**Back (clean — minimal anchor):**
+```
+{definition_en}
+{meaning_vi}
+```
+
+**Extra (reference panel — no model answer):**
+```
+Pattern:    {collocation_pattern}
+Source:     {source_sentence}
+Topic:      {ielts_topics joined with " · "}
+```
+
+**If `my_sentence` is non-empty** (post-review log entry), append to extra:
+```
+Your previous sentence:
+{my_sentence}
+```
+
+This shows the learner's own past production as a record, not as an answer to copy.
+
+**Usage note (for README, not CLI):**
+Import all three TSV files into Anki. In Anki, suspend new production cards immediately after import. Unsuspend a production card for a given term only after its basic card has been answered correctly 2+ times (Anki "young" status). This implements Decision D9: production activates after receptive maturity.
+
+---
+
+## Typst PDF Specification
+
+### Invocation
+```bash
+typst compile \
+  --input vocab_json="<path_to_data.json>" \
+  --input ipa_mode="absent|mixed|present" \
+  templates/typst/vocab-pack.typ \
+  dist/{article_id}/vocabulary.pdf
+```
+
+### JSON data format passed to Typst
+```json
+{
+  "article": {
+    "id": "dengue-bangladesh",
+    "title": "Deadly Dengue Fever Outbreak in Bangladesh Strains Scarce Resources",
+    "source_name": "The New York Times",
+    "date": "2023-09-25"
+  },
+  "ipa_mode": "mixed",
+  "categories": [
+    {
+      "name": "Outbreak, Disease & Public Health",
+      "entries": [...]
+    }
+  ]
 }
 ```
 
-### ArticleMeta (from article.toml)
+### IPA-optional table rendering
+
+| `ipa_mode` | Table columns |
+|---|---|
+| `Absent` | Term \| Definition (EN) \| Example \| Vietnamese |
+| `Mixed` | Term \| IPA \| Definition (EN) \| Example \| Vietnamese — show "—" for missing IPA |
+| `Present` | Term \| IPA \| Definition (EN) \| Example \| Vietnamese |
+
+This is a **template-level decision** — the column count changes at the article level, not per row.
+
+### Typst column widths (approximate, A4)
+
+For `Present` / `Mixed` mode:
+
+| Column | Width |
+|---|---|
+| Term | 22% |
+| IPA | 18% |
+| Definition (EN) | 25% |
+| Example | 22% |
+| Vietnamese | 13% |
+
+For `Absent` mode (no IPA):
+
+| Column | Width |
+|---|---|
+| Term | 25% |
+| Definition (EN) | 28% |
+| Example | 28% |
+| Vietnamese | 19% |
+
+### Required PDF features
+- A4 page size
+- UTF-8 Vietnamese and IPA unicode
+- Category headings (from `category` field, grouped in order of first appearance)
+- Multi-page table continuation
+- Page numbers
+- Clean text wrapping for long entries
+- Optional: total entry count in footer
+
+---
+
+## CLI Specification
+
+### Binary
+```
+aet
+```
+
+### Commands for v0.1
+
+```bash
+aet validate data/articles/dengue-bangladesh
+aet build data/articles/dengue-bangladesh
+aet build data/articles/dengue-bangladesh --only anki
+aet build data/articles/dengue-bangladesh --only pdf
+aet build data/articles/dengue-bangladesh --all-priorities
+```
+
+### `aet build` output
+```text
+dist/{article_id}/
+  anki-basic.tsv
+  anki-cloze.tsv
+  anki-production.tsv
+  vocabulary.pdf
+```
+
+### Exit codes
+```
+0 = success
+1 = validation error (blocks build)
+2 = build error (file write, Typst invocation)
+```
+
+### CLI prefix convention
+```
+✓ = success
+⚠ = warning (non-blocking)
+✗ = error (blocking)
+ℹ = info
+```
+
+### Session timer output (every command)
+```
+[aet] Done in 2.3s.
+[aet] Session time today: 18 min.  ✓ Within 20-min budget.
+```
+
+If over 20 minutes:
+```
+[aet] ⚠ Session time today: 24 min. Stop here — continue tomorrow.
+```
+
+---
+
+## Session Timer Implementation
+
+**Temp file:** `/tmp/aet-session-YYYY-MM-DD.json`
+
+```json
+{
+  "date": "2026-05-18",
+  "commands": [
+    { "cmd": "validate", "article": "dengue-bangladesh", "ts": 1747526400, "elapsed_ms": 340 },
+    { "cmd": "build",    "article": "dengue-bangladesh", "ts": 1747527100, "elapsed_ms": 2300 }
+  ],
+  "total_elapsed_ms": 2640
+}
+```
+
+**Rules:**
+- Read file on startup, check date. If date mismatch or file missing: start fresh.
+- Record current command start time with `std::time::Instant`.
+- On completion: read file again, add elapsed, write back.
+- Display cumulative total in minutes.
+- No external crate needed.
+
+---
+
+## Crate Layout
+
+```
+crates/
+  aet-core/
+    src/
+      models/
+        article.rs      ← ArticleMeta, IpaMode
+        vocab.rs        ← VocabEntry, Priority, CardType, Origin, ReviewStatus, IpaMode
+      parser/
+        csv.rs
+        toml.rs
+      validator.rs
+  aet-anki/
+    src/
+      basic.rs
+      cloze.rs
+      production.rs     ← reference panel format (no model answer — see Decision D8)
+      lib.rs
+  aet-typst/
+    src/
+      lib.rs
+      vocab_pack.rs     ← IpaMode-aware renderer
+  aet-cli/
+    src/
+      main.rs
+      commands/
+        validate.rs
+        build.rs
+      session_timer.rs
+```
+
+---
+
+## Rust Data Models
 
 ```rust
 pub struct ArticleMeta {
     pub id: String,
     pub title: String,
-    pub source: String,
-    pub author: String,
-    pub date: String,
-    pub level: String,
-    pub topics: Vec<String>,
+    pub source_name: String,
+    pub date: String,                      // YYYY-MM-DD
+    pub primary_topics: Vec<String>,
+    pub secondary_topics: Vec<String>,
     pub skills: Vec<String>,
-    pub subtitle: Option<String>,
+    pub level: Option<String>,
+    pub teacher_pdf: Option<String>,
+    pub private: bool,
+    pub copyright_mode: Option<String>,
 }
-```
 
-### ValidationResult
+pub enum IpaMode { Absent, Mixed, Present }   // ← NOT None/Some/All
 
-```rust
-pub struct ValidationResult {
-    pub article_valid: bool,
-    pub vocab_count: usize,
-    pub missing_my_sentence: Vec<String>,  // list of entry IDs
-    pub errors: Vec<String>,               // hard errors
-    pub warnings: Vec<String>,             // soft warnings
+pub struct VocabEntry {
+    pub id: String,
+    pub term: String,
+    pub ipa: Option<String>,
+    pub category: String,
+    pub entry_type: EntryType,
+    pub definition_en: String,
+    pub meaning_vi: String,
+    pub source_sentence: String,
+    pub my_sentence: Option<String>,
+    pub priority: Priority,
+    pub collocation_pattern: Option<String>,
+    pub ielts_topics: Vec<String>,
+    pub skill_use: Vec<String>,
+    pub difficulty: Option<String>,
+    pub card_types: Vec<CardType>,
+    pub origin: Origin,
+    pub review_status: ReviewStatus,
+    pub anki_export: bool,
+    pub tags: Vec<String>,
 }
+
+pub enum Priority       { P1, P2, P3 }
+pub enum CardType       { Basic, Cloze, Production }
+pub enum Origin         { Teacher, Codex, User, Manual }
+pub enum ReviewStatus   { Draft, Reviewed, Approved, Rejected }
 ```
 
 ---
 
-## Anki TSV Output Specification
-
-### anki-basic.tsv
-
-Columns (tab-separated, no header row):
-```
-front <TAB> back <TAB> tags
-```
-
-Rules for generating each row from a VocabEntry:
-- Only generate if `card_types` contains `"basic"`
-- `front`: `What does "{term}" mean?`
-- `back`: `{definition_en}\n\nVietnamese: {meaning_vi}\n\nExample: {source_sentence}`
-  - If `my_sentence` is Some and non-empty, append: `\n\nYour sentence: {my_sentence}`
-- `tags`: space-separated, all lowercase — combine `ielts_topic` + `difficulty` + `"aet"` + tags
-  - Example: `population b2 aet demographics aging`
-
-### anki-cloze.tsv
-
-Columns (tab-separated, no header row):
-```
-text <TAB> back_extra <TAB> tags
-```
-
-Rules:
-- Only generate if `card_types` contains `"cloze"`
-- `text`: Take `source_sentence`, find the term in it (case-insensitive), wrap with `{{c1::term}}`
-  - If term not found verbatim in source_sentence, use collocation_pattern instead
-  - If neither found, skip this entry and emit a warning: `⚠ Could not generate cloze for {id}: term not found in source_sentence`
-- `back_extra`: `{definition_en} | Vietnamese: {meaning_vi}`
-- `tags`: same rule as basic cards
-
-### Reverse cards
-- v0.1: Do NOT generate reverse cards even if card_types contains "reverse"
-- Emit one notice at build end: `ℹ Reverse cards skipped in v0.1 — will be added in v0.2`
-
-### File encoding
-- UTF-8, no BOM
-- Line endings: LF (Unix)
-- Tab character: \t (not spaces)
-
----
-
-## Typst Template Specification
-
-### Layout (match teacher's PDF exactly)
-
-Page: A4, margins 20mm all sides
-
-**Header block** (top of first page only):
-```
-[Bold, large] Academic English — Thầy Hà        [right-aligned small] Academic English — Thầy Hà
-[Bold, medium] Academic Vocabulary & Collocations
-Source: "{article title}"
-{source_name} — {author}, {date}
-```
-
-**Category sections** (repeat for each unique category value in order of first appearance):
-```
-[Bold heading, full width, light background]  {N}. {Category Name}
-```
-
-Followed by a 4-column table:
-| Term | Definition | Example | Vietnamese |
-|---|---|---|---|
-| Bold | Regular | Italic | Regular |
-
-Column width ratios: 20% | 30% | 30% | 20%
-
-Row alternating background: white / very light grey (#f8f8f8)
-Table border: thin grey lines
-
-**Footer** (every page):
-```
-Page N of M          [centered]          Academic English — Thầy Hà
-```
-
-**Last page footer addition:**
-```
-Total entries: {N} — organised into {M} thematic categories
-```
-
-### Template parameterisation
-
-The `.typ` file must accept data injected by the Rust renderer, not hardcoded.
-Use Typst's `#let` variables at the top of the file for all dynamic values.
-The Rust renderer generates a complete `.typ` file with data embedded, then calls:
-```
-typst compile vocab-pack.typ dist/{article-id}/vocab.pdf
-```
-
-### Font requirements
-- Headers: any clean serif (New Computer Modern or Liberation Serif)
-- Body: any clean sans-serif (Noto Sans or Liberation Sans)
-- Vietnamese characters: must render correctly — use Noto Sans which includes Vietnamese glyphs
-- Do not use fonts that require external download at compile time
-
----
-
-## CLI Interface
-
-### Commands
-
-```
-aet validate <article-path>
-aet build <article-path>
-aet build --only anki <article-path>
-aet build --only pdf <article-path>
-```
-
-### Output style
-
-Use plain stdout. No colours required for v0.1 (but allowed).
-Prefix lines with: `✓` (success), `⚠` (warning), `✗` (error), `ℹ` (info)
-Machine-readable JSON output: `aet --json validate <article-path>` — optional stretch goal
-
-### Exit codes
-- 0: success (warnings are OK, they do not cause non-zero exit)
-- 1: hard error (missing required file, parse failure, typst not found)
-
----
-
-## Crate Dependencies
-
-Only these crates are approved for v0.1. Do not add others without justification.
+## Suggested Dependencies
 
 ```toml
-# aet-core
-csv = "1"
-serde = { version = "1", features = ["derive"] }
-toml = "0.8"
-anyhow = "1"
-thiserror = "1"
+[dependencies]
+clap       = { version = "4", features = ["derive"] }
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+csv        = "1"
+toml       = "0.8"
+anyhow     = "1"
+```
 
-# aet-cli
-clap = { version = "4", features = ["derive"] }
-anyhow = "1"
+Session timer uses `std::time::Instant` and `std::fs` only — no external crate.
+Typst invocation uses `std::process::Command`.
 
-# aet-anki — no extra deps beyond aet-core
-# aet-typst — no extra deps beyond std::process::Command + anyhow
+---
+
+## Phase 1 Acceptance Criteria
+
+```bash
+# Both must succeed:
+aet build data/articles/dengue-bangladesh         # IPA present → with IPA column
+aet build data/articles/vietnam-two-child-policy  # No IPA → without IPA column
+```
+
+**Dengue Bangladesh checks:**
+- `vocabulary.pdf` has IPA column (IpaMode::Mixed → 114 present, 1 absent)
+- `anki-basic.tsv` contains only P1+approved+anki_export=yes rows
+- `anki-production.tsv` back shows reference panel, NOT a model answer
+- Vietnamese text renders correctly (UTF-8)
+- IPA text renders correctly
+- Session timer displayed
+
+**Vietnam Two-Child Policy checks:**
+- `vocabulary.pdf` has NO IPA column (IpaMode::Absent)
+- Table column widths use the 4-column layout (25/28/28/19%)
+- No empty IPA column or "—" placeholders
+- All other checks same as above
+
+**Both fixtures:**
+- `aet validate` passes with 0 errors
+- `anki-production.tsv` generated even if all `my_sentence` fields are empty
+- Session timer accumulated correctly across validate + build calls in same day
+
+---
+
+## Recommended Anki Deck Settings (for README)
+
+Document these settings in the README so the learner configures Anki correctly on first import. Without these, cards graduate too fast and the SRS algorithm doesn't work as intended for vocabulary acquisition.
+
+**Source:** Ali Abdaal Anki Masterclass (2024) + Migaku SRS research.
+
+```markdown
+## Anki Setup for AET Decks
+
+After importing any AET TSV file, apply these settings to the AET deck:
+
+| Setting | Value | Reason |
+|---|---|---|
+| Steps (new cards) | 15 1440 8640 | 15min → 1day → 6days before graduating |
+| Graduating interval | 15 days | Prevents premature long-term scheduling |
+| Easy interval | 60 days | Reserve "Easy" for truly mastered items |
+| Max reviews/day | 9999 | Never cap — let the queue clear naturally |
+| New interval (lapse) | 70% | Partial reset on forgetting, not full reset |
+| Leech threshold | 8 | Tag as leech after 8 failures — don't suspend |
+| New card order | Random | Avoids memorizing position rather than meaning |
+
+### Production deck setup
+After importing `anki-production.tsv`:
+1. Open AET::Article::{name} > Production sub-deck
+2. Select all cards → Suspend
+3. After a basic card reaches "young" status (answered correctly 2+ times),
+   find its production counterpart by tag and unsuspend it manually.
 ```
 
 ---
 
-## What NOT to Build in v0.1
+## Implementation Order
 
-- Do not build public.json / private.json export
-- Do not build .apkg Anki package (TSV only)
-- Do not build a web server or HTTP anything
-- Do not build a grammar content type parser
-- Do not build a topic bank / shared vocab system
-- Do not build the query command
-- Do not add a database (no SQLite)
-- Do not add async (no tokio)
-- Do not add logging frameworks (eprintln! is fine)
-- Do not write reverse card generation (stub it with a notice)
-
----
-
-## Test Fixture
-
-The test fixture is already populated at:
-```
-data/articles/vietnam-two-child-policy/
-  article.toml    ← 88 vocab entries, 2 writing prompts, 3 speaking questions
-  vocab.csv       ← all 88 entries from teacher's PDF
-```
-
-Use this as the primary test case. All acceptance criteria must pass against this fixture.
-
-Write at least one integration test that:
-1. Parses the fixture vocab.csv
-2. Asserts entry count == 88
-3. Asserts pop-001 has term == "demographic shift"
-4. Asserts entries with empty my_sentence produce warnings, not errors
-
----
-
-## Definition of Done Checklist
-
-Before marking v0.1 complete, verify:
-
-- [ ] `cargo build --release` succeeds with zero warnings
-- [ ] `cargo test` passes
-- [ ] `aet validate data/articles/vietnam-two-child-policy` exits 0
-- [ ] `aet build data/articles/vietnam-two-child-policy` exits 0
-- [ ] `dist/vietnam-two-child-policy/vocab.pdf` exists and renders all 88 entries
-- [ ] `dist/vietnam-two-child-policy/anki-basic.tsv` imports into Anki without errors
-- [ ] `dist/vietnam-two-child-policy/anki-cloze.tsv` imports into Anki without errors
-- [ ] Vietnamese characters are correct in all outputs
-- [ ] Missing `typst` in PATH produces a clear error message
-- [ ] No `unwrap()` calls in library code (use `?` and `anyhow`)
-- [ ] README.md explains how to install typst, run validate, run build
-
----
-
-*Brief version: 1.0 — locked for v0.1*
-*Do not modify this brief during implementation — open a new brief for v0.2*
+1. Create Rust workspace + Cargo.toml
+2. `aet-core`: VocabEntry model + CSV parser
+3. `aet-core`: ArticleMeta model + TOML parser
+4. `aet-core`: Validator (IpaMode detection, controlled vocabulary checks)
+5. `aet-anki`: basic TSV exporter
+6. `aet-anki`: cloze TSV exporter (with fallback logic)
+7. `aet-anki`: production TSV exporter (reference panel format — Decision D8)
+8. `aet-cli`: `validate` command + session timer
+9. `aet-cli`: `build` command
+10. `aet-typst`: IpaMode-aware JSON serializer
+11. `aet-typst`: Typst CLI invocation
+12. Typst template: `vocab-pack.typ` (IPA-optional, Vietnamese, A4, category headings)
+13. Sample datasets (both fixtures)
+14. Tests
+15. README (includes production card usage note — Decision D9)
