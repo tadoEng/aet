@@ -35,6 +35,10 @@ dependencies = [
 [[package]]
 name = "aet-typst"
 version = "0.1.0"
+dependencies = [
+ "aet-core",
+ "anyhow",
+]
 
 [[package]]
 name = "anstream"

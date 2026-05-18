@@ -1,5 +1,14 @@
 /target/
+.codex-target*/
+.serena/
+/tmp/
 dist/
 *.apkg
 *.pdf
 .DS_Store
+/data/private/
+/data/inbox/
+**/*.private.json
+**/full-article.txt
+**/teacher-notes.md
+**/teacher-vocab.pdf

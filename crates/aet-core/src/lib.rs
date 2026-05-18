@@ -6,7 +6,10 @@
 pub mod models;
 pub mod validator;
 
-pub use models::{Article, ArticleMeta, VocabEntry, parse_article_meta, parse_vocab};
+pub use models::{
+    Article, ArticleMeta, CardType, EntryType, IpaMode, Origin, Priority, ReviewStatus, VocabEntry,
+    parse_article_meta, parse_vocab,
+};
 pub use validator::{ValidationResult, validate};
 
 use anyhow::{Context, Result};
@@ -24,8 +27,8 @@ pub fn load_article(dir: &Path) -> Result<Article> {
     let toml_content = std::fs::read_to_string(&toml_path)
         .with_context(|| format!("Cannot read {}", toml_path.display()))?;
 
-    let csv_bytes = std::fs::read(&csv_path)
-        .with_context(|| format!("Cannot read {}", csv_path.display()))?;
+    let csv_bytes =
+        std::fs::read(&csv_path).with_context(|| format!("Cannot read {}", csv_path.display()))?;
 
     let meta = parse_article_meta(&toml_content)?;
     let vocab = parse_vocab(&csv_bytes)?;

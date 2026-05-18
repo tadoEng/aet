@@ -8,7 +8,6 @@
 
 mod commands;
 
-use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
@@ -38,6 +37,9 @@ enum Commands {
         /// Build only a specific output type
         #[arg(long, value_name = "TYPE")]
         only: Option<BuildTarget>,
+        /// Include P2/P3 rows when exporting Anki files
+        #[arg(long)]
+        all_priorities: bool,
     },
 }
 
@@ -54,15 +56,22 @@ fn main() {
 
     let result = match cli.command {
         Commands::Validate { article_path } => commands::validate::run(&article_path),
-        Commands::Build { article_path, only } => {
+        Commands::Build {
+            article_path,
+            only,
+            all_priorities,
+        } => {
             let build_anki = matches!(only, None | Some(BuildTarget::Anki));
             let build_pdf = matches!(only, None | Some(BuildTarget::Pdf));
-            commands::build::run(&article_path, build_anki, build_pdf)
+            commands::build::run(&article_path, build_anki, build_pdf, all_priorities)
         }
     };
 
     if let Err(e) = result {
         eprintln!("✗ {:#}", e);
-        std::process::exit(1);
+        let code = e
+            .downcast_ref::<commands::CommandError>()
+            .map_or(1, commands::CommandError::code);
+        std::process::exit(code);
     }
 }

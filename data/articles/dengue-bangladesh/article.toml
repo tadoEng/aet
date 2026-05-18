@@ -1,0 +1,15 @@
+id = "dengue-bangladesh"
+title = "Deadly Dengue Fever Outbreak in Bangladesh Strains Scarce Resources"
+source_name = "The New York Times"
+author = "Saif Hasnat & Sameer Yasir"
+date = "2023-09-25"
+level = "B2-C1"
+primary_topics = ["health-medicine", "environment", "urban-rural"]
+secondary_topics = ["poverty-global-issues", "government-policy"]
+skills = ["reading", "writing-task2", "speaking-part3"]
+teacher_pdf = "inbox/2023-09-25-dengue-bangladesh/teacher-vocab.pdf"
+private = true
+copyright_mode = "private-study-only"
+
+[stats]
+has_ipa = true
