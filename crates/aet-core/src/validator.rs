@@ -292,4 +292,23 @@ mod tests {
                 .any(|error| error.contains("duplicate id"))
         );
     }
+
+    #[test]
+    fn validate_accepts_separate_personality_and_physical_appearance_topics() {
+        let mut article = load_fixture();
+        article.meta.primary_topics = vec!["personality".to_string()];
+        article.meta.secondary_topics = vec!["physical-appearance".to_string()];
+        article.vocab[0].ielts_topics =
+            vec!["personality".to_string(), "physical-appearance".to_string()];
+        let result = validate(&article);
+        assert!(
+            result
+                .errors
+                .iter()
+                .all(|error| !error.contains("invalid topic")
+                    && !error.contains("invalid ielts_topics")),
+            "errors: {:?}",
+            result.errors
+        );
+    }
 }

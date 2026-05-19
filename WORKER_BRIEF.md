@@ -69,7 +69,7 @@ fixed_phrase | prepositional_pattern | reporting_verb | sentence_frame
 ```
 environment | poverty-global-issues | law-crimes | business-economics |
 health-medicine | education | family-relationships-teenagers |
-urban-rural | personalities-physical-appearances | work-jobs | government-policy
+urban-rural | personality | physical-appearance | work-jobs | government-policy
 ```
 
 ---
@@ -540,10 +540,12 @@ After importing any AET TSV file, apply these settings to the AET deck:
 
 ### Production deck setup
 After importing `anki-production.tsv`:
-1. Open AET::Article::{name} > Production sub-deck
+1. Open `AET::Article::{article-id}` > Production sub-deck
 2. Select all cards → Suspend
 3. After a basic card reaches "young" status (answered correctly 2+ times),
    find its production counterpart by tag and unsuspend it manually.
+
+Use stable kebab-case article/topic IDs in deck names, for example `AET::Article::vietnam-two-child-policy` and `AET::Topic::health-medicine`. Display titles may contain spaces inside card content, but deck identifiers should stay import- and AnkiConnect-friendly.
 ```
 
 ---

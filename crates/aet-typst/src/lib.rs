@@ -55,6 +55,7 @@ pub fn generate_typ(article: &Article) -> String {
 
 #v(8pt)
 #text(size: 8pt, fill: rgb("#666666"))[IPA mode: {ipa_mode} | Total entries: {entry_count}]
+#text(size: 7.5pt, fill: rgb("#777777"))[{ipa_note}]
 #v(8pt)
 
 "##,
@@ -62,6 +63,7 @@ pub fn generate_typ(article: &Article) -> String {
         article_title = escape_typst_content(&article.meta.title),
         source_line = escape_typst_content(&source_line(article)),
         ipa_mode = ipa_mode,
+        ipa_note = escape_typst_content(&ipa_note(ipa_mode)),
         entry_count = article.vocab.len(),
     ));
 
@@ -137,6 +139,18 @@ fn source_line(article: &Article) -> String {
     )
 }
 
+fn ipa_note(ipa_mode: IpaMode) -> String {
+    match ipa_mode {
+        IpaMode::Absent => {
+            "IPA is not included because this teacher reference does not provide it.".to_string()
+        }
+        IpaMode::Mixed => {
+            "IPA is sourced from the teacher reference; - marks entries without IPA.".to_string()
+        }
+        IpaMode::Present => "IPA is sourced from the teacher reference.".to_string(),
+    }
+}
+
 fn escape_typst_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
@@ -152,6 +166,8 @@ fn escape_typst_content(value: &str) -> String {
         .replace('$', "\\$")
         .replace('_', "\\_")
         .replace('~', "\\~")
+        .replace('<', "\\<")
+        .replace('>', "\\>")
         .replace('{', "\\{")
         .replace('}', "\\}")
 }
@@ -195,8 +211,17 @@ mod tests {
     }
 
     #[test]
+    fn generate_typ_explains_mixed_ipa_placeholder() {
+        let mut article = load_fixture();
+        article.vocab[0].ipa = Some("/test/".to_string());
+        let typ = generate_typ(&article);
+        assert!(typ.contains("IPA is sourced from the teacher reference"));
+        assert!(typ.contains("- marks entries without IPA"));
+    }
+
+    #[test]
     fn escape_typst_content_handles_markup_characters() {
-        let escaped = escape_typst_content("a [b] #tag $120");
-        assert_eq!(escaped, "a \\[b\\] \\#tag \\$120");
+        let escaped = escape_typst_content("a [b] #tag $120 <ipa>");
+        assert_eq!(escaped, "a \\[b\\] \\#tag \\$120 \\<ipa\\>");
     }
 }

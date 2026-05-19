@@ -268,9 +268,12 @@ Standalone vocabulary organized by academic topic. Initial topic taxonomy:
 - `education`
 - `family-relationships-teenagers`
 - `urban-rural`
-- `personalities-physical-appearances`
+- `personality`
+- `physical-appearance`
 - `work-jobs`
 - `government-policy`
+
+`personality` and `physical-appearance` are intentionally separate topics so the topic bank does not grow around an ambiguous combined label.
 
 ## 5.3 Grammar Patterns
 
@@ -747,19 +750,21 @@ Apply these to the AET deck after first import. Without them, cards graduate too
 | New card order | Random | Avoids memorizing position rather than meaning |
 
 **Production deck setup after import:**
-1. Open `AET::Article::{name}` → Production sub-deck.
+1. Open `AET::Article::{article-id}` -> Production sub-deck.
 2. Select all cards → Suspend.
 3. After a basic card reaches "young" status (2+ correct recalls, interval > 1 day), unsuspend its matching production card by tag.
 
 ## 10.6 Deck Naming Convention
 
 ```text
-AET::Article::Vietnam Two-Child Policy
-AET::Article::Dengue Bangladesh
-AET::Topic::Health Medicine
-AET::Topic::Family Relationships
-AET::Topic::Government Policy
+AET::Article::vietnam-two-child-policy
+AET::Article::dengue-bangladesh
+AET::Topic::health-medicine
+AET::Topic::family-relationships-teenagers
+AET::Topic::government-policy
 ```
+
+Use stable kebab-case IDs in deck names. Display titles can still appear in card content, but deck identifiers should remain friendly to Anki import workflows and AnkiConnect.
 
 ---
 
@@ -925,7 +930,7 @@ aet report progress
 
 **Why production cards are still included from day 1:** The card is generated at import and sits suspended. It becomes active only when the basic card matures. This means the production card fires at exactly the right moment — after recognition is established, before production is routine. A 2022 study confirms sentence-writing tasks produce significantly higher productive mastery than passive recognition tasks (p < 0.05), but only when the learner genuinely attempts production rather than reading a provided answer.
 
-**Note on collocations vs single words (IELTS research):** Collocations account for 25% of the IELTS Lexical Resource criterion. Cambridge research (2025) confirms collocational sophistication is a significant positive predictor of expert LR ratings at B2–C1. The P1 shortlist should always prioritize verb-noun and adjective-noun collocations over isolated words — even AWL-listed single words. 150–200 mastered collocations are worth more than 500 isolated words for IELTS Writing Band 7+.
+**Note on collocations vs single words (IELTS research):** Collocational control is a significant part of IELTS Lexical Resource, especially at B2-C1, where examiners reward natural combinations rather than isolated advanced words. The P1 shortlist should always prioritize verb-noun and adjective-noun collocations over isolated words, even AWL-listed single words. A smaller set of mastered collocations is usually more useful for IELTS Writing Band 7+ than a large list of isolated vocabulary.
 
 ## 13.2 What to Highlight on iPad
 
@@ -1226,6 +1231,8 @@ Public content must not include:
 - Google Classroom corrections.
 - Full paid-source screenshots.
 
+Deferred Phase 6 rule: "sanitized" must be explicitly defined before public export is implemented. Until then, public export must treat teacher-provided definitions, teacher examples, full article sentences, private corrections, and paid-source passages as non-public by default. Public wording should be learner-authored or newly written from approved concepts, not copied verbatim from private/source material.
+
 ## 16.2 Private Local Web Mode
 
 Future local app:
@@ -1338,6 +1345,8 @@ Features:
 - Canonical ID system.
 - Better duplicate handling.
 - Query command.
+
+Note: the Phase 1 CLI may offer `aet build-topic <topic>` as a read-only export over article fixtures. That does not start Phase 3 unless it introduces master vocabulary storage, canonical cross-article records, or dedupe/query workflows.
 
 ## Phase 4 — Grammar and Corrections
 

@@ -118,11 +118,13 @@ pub mod build {
                 out_dir.join("anki-production.tsv").display()
             );
             println!(
-                "[aet] Anki rows: basic={}, cloze={}, production={} (cloze fallbacks={})",
-                result.basic_count,
-                result.cloze_count,
-                result.production_count,
-                result.cloze_fallback_count
+                "{}",
+                format_anki_export_summary(
+                    result.basic_count,
+                    result.cloze_count,
+                    result.production_count,
+                    result.cloze_fallback_count
+                )
             );
         }
 
@@ -134,6 +136,25 @@ pub mod build {
 
         Ok(())
     }
+}
+
+fn format_anki_export_summary(
+    basic_count: usize,
+    cloze_count: usize,
+    production_count: usize,
+    cloze_fallback_count: usize,
+) -> String {
+    let mut summary = format!(
+        "[aet] Anki rows: basic={}, cloze={}, production={} (cloze fallbacks={})",
+        basic_count, cloze_count, production_count, cloze_fallback_count
+    );
+    if cloze_fallback_count > 0 {
+        summary.push_str(&format!(
+            "\n[aet] ⚠ {} cloze fallback card(s) wrapped a whole sentence; review manually before import.",
+            cloze_fallback_count
+        ));
+    }
+    summary
 }
 
 pub mod build_topic {
@@ -214,11 +235,13 @@ pub mod build_topic {
                 out_dir.join("anki-production.tsv").display()
             );
             println!(
-                "[aet] Anki rows: basic={}, cloze={}, production={} (cloze fallbacks={})",
-                result.basic_count,
-                result.cloze_count,
-                result.production_count,
-                result.cloze_fallback_count
+                "{}",
+                format_anki_export_summary(
+                    result.basic_count,
+                    result.cloze_count,
+                    result.production_count,
+                    result.cloze_fallback_count
+                )
             );
         }
 
@@ -270,13 +293,23 @@ impl SessionTimer {
         let elapsed_ms = self.start.elapsed().as_millis() as u64;
         let previous_total = read_total_elapsed_ms(&self.path).unwrap_or(0);
         let total_elapsed_ms = previous_total.saturating_add(elapsed_ms);
-
-        let payload = format!(
-            "{{\n  \"date\": \"{}\",\n  \"commands\": [\n    {{ \"cmd\": \"{}\", \"article\": \"{}\", \"elapsed_ms\": {} }}\n  ],\n  \"total_elapsed_ms\": {}\n}}\n",
-            current_utc_date(),
+        let previous_commands = read_command_history(&self.path).unwrap_or_default();
+        let current_command = format!(
+            "    {{ \"cmd\": \"{}\", \"article\": \"{}\", \"elapsed_ms\": {} }}",
             json_escape(&self.command),
             json_escape(&self.article),
-            elapsed_ms,
+            elapsed_ms
+        );
+        let commands = if previous_commands.trim().is_empty() {
+            current_command
+        } else {
+            format!("{},\n{}", previous_commands.trim_end(), current_command)
+        };
+
+        let payload = format!(
+            "{{\n  \"date\": \"{}\",\n  \"commands\": [\n{}\n  ],\n  \"total_elapsed_ms\": {}\n}}\n",
+            current_utc_date(),
+            commands,
             total_elapsed_ms
         );
 
@@ -302,6 +335,20 @@ impl SessionTimer {
                 total_minutes
             );
         }
+    }
+}
+
+fn read_command_history(path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let marker = "\"commands\"";
+    let marker_start = content.find(marker)?;
+    let array_start = content[marker_start..].find('[')? + marker_start + 1;
+    let array_end = content[array_start..].find("\n  ]")? + array_start;
+    let commands = content[array_start..array_end].trim();
+    if commands.is_empty() {
+        Some(String::new())
+    } else {
+        Some(commands.to_string())
     }
 }
 
@@ -370,5 +417,26 @@ mod tests {
         let total = read_total_elapsed_ms(&path).unwrap();
         assert!(total >= 1000);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn session_timer_preserves_command_history() {
+        let path = std::env::temp_dir().join("aet-session-test-history.json");
+        let _ = std::fs::remove_file(&path);
+
+        SessionTimer::with_path(path.clone(), "validate", "vietnam").finish();
+        SessionTimer::with_path(path.clone(), "build", "vietnam").finish();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("\"cmd\": \"validate\""));
+        assert!(content.contains("\"cmd\": \"build\""));
+        assert_eq!(content.matches("\"cmd\"").count(), 2);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn anki_export_summary_warns_when_cloze_fallbacks_exist() {
+        assert!(format_anki_export_summary(3, 3, 3, 2).contains("review manually"));
     }
 }

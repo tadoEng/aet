@@ -38,7 +38,7 @@ pub const ENTRY_TYPES: [&str; 8] = [
     "sentence_frame",
 ];
 
-pub const IELTS_TOPICS: [&str; 11] = [
+pub const IELTS_TOPICS: [&str; 12] = [
     "environment",
     "poverty-global-issues",
     "law-crimes",
@@ -47,7 +47,8 @@ pub const IELTS_TOPICS: [&str; 11] = [
     "education",
     "family-relationships-teenagers",
     "urban-rural",
-    "personalities-physical-appearances",
+    "personality",
+    "physical-appearance",
     "work-jobs",
     "government-policy",
 ];
@@ -368,7 +369,14 @@ where
     if values.is_empty() {
         bail!("{} must contain at least one value", field);
     }
-    values.into_iter().map(|value| value.parse()).collect()
+    values
+        .into_iter()
+        .map(|value| {
+            value
+                .parse()
+                .map_err(|error| anyhow::anyhow!("{}: {}", field, error))
+        })
+        .collect()
 }
 
 fn optional_string(value: String) -> Option<String> {
@@ -449,6 +457,17 @@ mod tests {
         );
         let error = parse_vocab(csv.as_bytes()).unwrap_err().to_string();
         assert!(error.contains("invalid EntryType"));
+    }
+
+    #[test]
+    fn parse_vocab_invalid_card_types_error_names_field() {
+        let csv = format!(
+            "{}\nx-001,test,,Category,word,definition,meaning,source,,P1,pattern,education,writing-task2,B2,quiz,teacher,approved,yes,tag\n",
+            VOCAB_HEADERS.join(",")
+        );
+        let error = parse_vocab(csv.as_bytes()).unwrap_err().to_string();
+        assert!(error.contains("card_types"));
+        assert!(error.contains("invalid CardType"));
     }
 
     #[test]

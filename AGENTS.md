@@ -20,6 +20,8 @@ AET v0.1 is a deterministic local CLI:
 
 No built-in AI calls, AnkiConnect sync, web app, dedupe command, database, or public site export belongs in Phase 1.
 
+`build-topic` exists as an early cross-article export convenience. Do not expand it into Phase 3 master vocabulary, dedupe, or canonical topic-bank storage until Phase 1 learning proof is signed off.
+
 ## Commands
 
 Run from the repo root on Windows PowerShell:
