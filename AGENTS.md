@@ -31,6 +31,7 @@ cargo run -p aet-cli -- validate data/articles/vietnam-two-child-policy
 cargo run -p aet-cli -- build data/articles/vietnam-two-child-policy
 cargo run -p aet-cli -- validate data/articles/dengue-bangladesh
 cargo run -p aet-cli -- build data/articles/dengue-bangladesh
+cargo run -p aet-cli -- build-topic health-medicine
 ```
 
 Typst must be installed and available on `PATH` for PDF builds:

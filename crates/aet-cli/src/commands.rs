@@ -1,4 +1,6 @@
-use aet_core::{load_article, validate as validate_article};
+use aet_core::{
+    IELTS_TOPICS, build_topic_article, load_article, load_articles, validate as validate_article,
+};
 use anyhow::Result;
 use std::error::Error;
 use std::fmt;
@@ -126,6 +128,102 @@ pub mod build {
 
         if build_pdf {
             aet_typst::export(&article, &out_dir)
+                .map_err(|error| CommandError::build(format!("PDF export failed: {:#}", error)))?;
+            println!("[aet] Output: {}", out_dir.join("vocabulary.pdf").display());
+        }
+
+        Ok(())
+    }
+}
+
+pub mod build_topic {
+    use super::*;
+
+    pub fn run(topic: &str, build_anki: bool, build_pdf: bool, all_priorities: bool) -> Result<()> {
+        let timer = SessionTimer::start("build-topic", Path::new(topic));
+        let result = run_inner(topic, build_anki, build_pdf, all_priorities);
+        timer.finish();
+        result
+    }
+
+    fn run_inner(
+        topic: &str,
+        build_anki: bool,
+        build_pdf: bool,
+        all_priorities: bool,
+    ) -> Result<()> {
+        if !IELTS_TOPICS.contains(&topic) {
+            return Err(CommandError::validation(format!(
+                "Unknown topic '{}'. Expected one of: {}",
+                topic,
+                IELTS_TOPICS.join(", ")
+            ))
+            .into());
+        }
+
+        let articles = load_articles(Path::new("data/articles")).map_err(|error| {
+            CommandError::validation(format!("Could not load data/articles: {:#}", error))
+        })?;
+        let topic_article = build_topic_article(topic, &articles);
+        let contributing_articles = articles
+            .iter()
+            .filter(|article| {
+                article.vocab.iter().any(|entry| {
+                    entry
+                        .ielts_topics
+                        .iter()
+                        .any(|entry_topic| entry_topic == topic)
+                })
+            })
+            .count();
+        if topic_article.vocab.is_empty() {
+            return Err(CommandError::validation(format!(
+                "No vocabulary rows found for topic '{}'",
+                topic
+            ))
+            .into());
+        }
+
+        let validation = validate_article(&topic_article);
+        validation.print_summary();
+        if !validation.is_valid() {
+            return Err(CommandError::validation(format!(
+                "{} validation errors found for topic {}",
+                validation.errors.len(),
+                topic
+            ))
+            .into());
+        }
+
+        let out_dir = PathBuf::from("dist").join("topics").join(topic);
+        println!(
+            "[aet] Building topic bank {} from {} row(s) across {} contributing article(s) (scanned {})...",
+            topic,
+            topic_article.vocab.len(),
+            contributing_articles,
+            articles.len()
+        );
+
+        if build_anki {
+            let result = aet_anki::export(&topic_article, &out_dir, all_priorities)
+                .map_err(|error| CommandError::build(format!("Anki export failed: {:#}", error)))?;
+            println!("[aet] Output: {}", out_dir.join("anki-basic.tsv").display());
+            println!("[aet] Output: {}", out_dir.join("anki-cloze.tsv").display());
+            println!(
+                "[aet] Output: {}",
+                out_dir.join("anki-production.tsv").display()
+            );
+            println!(
+                "[aet] Anki rows: basic={}, cloze={}, production={} (cloze fallbacks={})",
+                result.basic_count,
+                result.cloze_count,
+                result.production_count,
+                result.cloze_fallback_count
+            );
+        }
+
+        if build_pdf {
+            aet_typst::export(&topic_article, &out_dir)
                 .map_err(|error| CommandError::build(format!("PDF export failed: {:#}", error)))?;
             println!("[aet] Output: {}", out_dir.join("vocabulary.pdf").display());
         }

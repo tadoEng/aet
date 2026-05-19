@@ -5,6 +5,7 @@
 //!   aet build <article-path>
 //!   aet build --only anki <article-path>
 //!   aet build --only pdf <article-path>
+//!   aet build-topic <topic>
 
 mod commands;
 
@@ -41,6 +42,17 @@ enum Commands {
         #[arg(long)]
         all_priorities: bool,
     },
+    /// Build a cross-article topic bank from canonical ielts_topics
+    BuildTopic {
+        /// Canonical IELTS topic, e.g. health-medicine
+        topic: String,
+        /// Build only a specific output type
+        #[arg(long, value_name = "TYPE")]
+        only: Option<BuildTarget>,
+        /// Include P2/P3 rows when exporting Anki files
+        #[arg(long)]
+        all_priorities: bool,
+    },
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -64,6 +76,15 @@ fn main() {
             let build_anki = matches!(only, None | Some(BuildTarget::Anki));
             let build_pdf = matches!(only, None | Some(BuildTarget::Pdf));
             commands::build::run(&article_path, build_anki, build_pdf, all_priorities)
+        }
+        Commands::BuildTopic {
+            topic,
+            only,
+            all_priorities,
+        } => {
+            let build_anki = matches!(only, None | Some(BuildTarget::Anki));
+            let build_pdf = matches!(only, None | Some(BuildTarget::Pdf));
+            commands::build_topic::run(&topic, build_anki, build_pdf, all_priorities)
         }
     };
 
